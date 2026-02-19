@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ═══════════════════════════════════════════════════════
-# v6.0: ENTRY READINESS ASSESSMENT
+# v7.0: ENTRY READINESS + BACKWARD-COMPAT FIX + EXTENDED COINS
 # ═══════════════════════════════════════════════════════
 
 def assess_entry_readiness(p):
@@ -179,7 +179,7 @@ if 'settings' not in st.session_state:
         'exchange': 'okx',          # OKX по умолчанию
         'timeframe': '4h',          # 4h таймфрейм
         'lookback_days': 90,        # 90 дней (v9: увеличен для надёжности DFA и Kalman)
-        'top_n_coins': 100,         # 100 монет
+        'top_n_coins': 150,         # 150 монет (v7: увеличено для большего покрытия пар)
         'max_pairs_display': 30,    # 30 пар максимум
         'pvalue_threshold': 0.03,   # 0.03
         'zscore_threshold': 2.3,    # 2.3
@@ -588,14 +588,24 @@ class CryptoPairsScanner:
             
             # [v8.1] Adaptive Signal (TF-aware)
             stab_ratio = stability['stability_score']  # 0.0–1.0
-            state, direction, threshold = get_adaptive_signal(
-                zscore=result['zscore'],
-                confidence=confidence,
-                quality_score=q_score,
-                timeframe=self.timeframe,
-                stability_ratio=stab_ratio,
-                fdr_passed=fdr_passed  # v10.4: FDR gate
-            )
+            try:
+                state, direction, threshold = get_adaptive_signal(
+                    zscore=result['zscore'],
+                    confidence=confidence,
+                    quality_score=q_score,
+                    timeframe=self.timeframe,
+                    stability_ratio=stab_ratio,
+                    fdr_passed=fdr_passed  # v10.4: FDR gate
+                )
+            except TypeError:
+                # Backward compatibility: old mean_reversion_analysis без fdr_passed
+                state, direction, threshold = get_adaptive_signal(
+                    zscore=result['zscore'],
+                    confidence=confidence,
+                    quality_score=q_score,
+                    timeframe=self.timeframe,
+                    stability_ratio=stab_ratio,
+                )
             
             halflife_hours = result['halflife'] * 24
             
@@ -770,7 +780,7 @@ def plot_spread_chart(spread_data, pair_name, zscore):
 # === ИНТЕРФЕЙС ===
 
 st.markdown('<p class="main-header">🔍 Crypto Pairs Trading Scanner</p>', unsafe_allow_html=True)
-st.caption("Версия 6.0 | Entry Readiness + Цветовая палитра + FDR bypass")
+st.caption("Версия 7.0 | Entry Readiness + FDR bypass + Backward-compat fix + Extended coins")
 st.markdown("---")
 
 # Sidebar - настройки
@@ -807,9 +817,10 @@ with st.sidebar:
     top_n_coins = st.slider(
         "Количество монет для анализа",
         min_value=20,
-        max_value=100,
+        max_value=200,
         value=st.session_state.settings['top_n_coins'],
         step=10,
+        help="Больше монет → больше пар → больше шансов найти сигнал. 150 = C(100+,2) ≈ 5000+ пар",
         key='coins_slider'
     )
     st.session_state.settings['top_n_coins'] = top_n_coins
@@ -1619,6 +1630,7 @@ else:
 # Footer
 st.markdown("---")
 st.caption("⚠️ Disclaimer: Этот инструмент предназначен только для образовательных целей. Не является финансовой рекомендацией.")
-# VERSION: 5.5
-# LAST UPDATED: 2026-02-18
-# FEATURES: v10.4 — HR cap↓30, DFA↑8, Conditional Z-cap, FDR gate, Stablecoin toggle, Corr pre-filter
+# VERSION: 7.0
+# LAST UPDATED: 2026-02-19
+# FEATURES: v7.0 — Backward-compat fix for fdr_passed, Extended coin limit (150), v10.5 sync
+# FIXES: get_adaptive_signal() TypeError when analysis module is outdated
